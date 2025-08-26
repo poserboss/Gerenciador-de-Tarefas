@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kanban Task Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* Estilos base e temas com variáveis CSS */
+    :root {
+      --bg-gradient-from: #111827; /* gray-900 */
+      --bg-gradient-via: #1f2937; /* gray-800 */
+      --bg-header: rgba(31, 41, 55, 0.9); /* gray-800 com opacidade */
+      --bg-column: #1f2937; /* gray-800 */
+      --bg-card: #374151; /* gray-700 */
+      --bg-input: rgba(55, 65, 81, 0.6); /* gray-700/60 */
+      --text-main: #ffffff;
+      --text-secondary: #d1d5db; /* gray-300 */
+      --border-color: #4b5563; /* gray-600 */
+      --glass-bg: rgba(31, 41, 55, 0.85);
+    }
+    .theme-light {
+      --bg-gradient-from: #e5e7eb; /* gray-200 */
+      --bg-gradient-via: #f3f4f6; /* gray-100 */
+      --bg-header: rgba(255, 255, 255, 0.9);
+      --bg-column: #ffffff;
+      --bg-card: #f3f4f6; /* gray-100 */
+      --bg-input: rgba(229, 231, 235, 0.6); /* gray-200/60 */
+      --text-main: #1f2937; /* gray-800 */
+      --text-secondary: #4b5563; /* gray-600 */
+      --border-color: #d1d5db; /* gray-300 */
+      --glass-bg: rgba(255, 255, 255, 0.85);
+    }
+    body { 
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-gradient-from);
+      color: var(--text-main);
+    }
+    /* Estilos adicionais */
+    .task-card { touch-action: none; transition: all 0.2s ease-in-out; background-color: var(--bg-card); }
+    .task-card:hover { transform: translateY(-4px) scale(1.02); box-shadow: 0 8px 20px rgba(0,0,0,0.25); }
+    .column-body::-webkit-scrollbar { width: 6px; }
+    .column-body::-webkit-scrollbar-thumb { background: #555; border-radius: 6px; }
+    .dragging { opacity: 0.6; transform: scale(0.95); }
+    .drag-over { background-color: rgba(59, 130, 246, 0.15); border: 2px dashed #3b82f6; }
+    .glass { background: var(--glass-bg); backdrop-filter: blur(8px); }
+    .fade-in { animation: fadeIn 0.3s ease-in-out; }
+    @keyframes fadeIn { from {opacity:0; transform:scale(0.95);} to {opacity:1; transform:scale(1);} }
+    .task-card.completed { opacity: 0.7; }
+    .task-card.completed p { text-decoration: line-through; color: var(--text-secondary); }
+  </style>
+</head>
+<body class="antialiased">
+
+  <div id="auth-screen" class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <div class="glass w-full max-w-md rounded-2xl shadow-2xl p-8 fade-in">
+      <h2 id="auth-title" class="text-3xl font-bold text-center text-white mb-6">Login</h2>
+      <div id="auth-message" class="text-center mb-4 hidden p-2 rounded-md"></div>
+      <form id="login-form" class="space-y-5">
+        <div>
+          <label for="email" class="block text-sm font-medium text-gray-300 mb-2">Email</label>
+          <input type="email" id="email" class="w-full px-3 py-2 bg-gray-700/60 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+        </div>
+        <div>
+          <label for="password" class="block text-sm font-medium text-gray-300 mb-2">Senha</label>
+          <input type="password" id="password" class="w-full px-3 py-2 bg-gray-700/60 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+        </div>
+        <a href="#" id="forgot-password-link" class="text-sm text-blue-400 hover:underline float-right">Esqueci minha senha</a>
+        <button type="submit" id="login-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-lg shadow-md transition duration-300 !mt-8">Entrar</button>
+      </form>
+      <p class="text-center text-sm text-gray-400 mt-6">
+        <span id="auth-switch-text">Não tem uma conta?</span>
+        <a href="#" id="auth-switch-link" class="text-blue-400 hover:underline">Cadastre-se</a>
+      </p>
+    </div>
+  </div>
+
+  <div id="app-screen" class="hidden h-screen flex flex-col bg-gradient-to-br" style="background-image: linear-gradient(to bottom right, var(--bg-gradient-from), var(--bg-gradient-via), var(--bg-gradient-from));">
+    <header class="backdrop-blur-md shadow-md p-4 flex justify-between items-center z-10" style="background-color: var(--bg-header); border-bottom: 1px solid var(--border-color);">
+      <h1 class="text-xl md:text-2xl font-bold tracking-tight">⚡ Gerenciador de Tarefas</h1>
+      <div class="flex items-center space-x-2 md:space-x-4">
+        <span id="user-display-name" class="text-sm hidden md:block" style="color: var(--text-secondary);"></span>
+        <button id="settings-btn" class="p-2 rounded-full hover:bg-gray-700" title="Configurações">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+        </button>
+        <button id="logout-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-3 md:px-4 rounded-lg shadow-md transition text-sm">Sair</button>
+      </div>
+    </header>
+
+    <main class="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-x-auto p-4 md:p-6 space-y-6 md:space-y-0 md:space-x-6">
+      <div id="board-container" class="flex flex-col md:flex-row space-y-6 md:space-y-0 md:space-x-6"></div>
+      <div class="flex-shrink-0 mt-6 md:mt-0">
+        <button id="add-column-btn" class="w-full md:w-auto hover:bg-gray-600 font-bold py-3 px-6 rounded-xl shadow-md transition duration-300" style="background-color: var(--bg-card);">
+          ➕ Adicionar Bloco
+        </button>
+      </div>
+    </main>
+  </div>
+
+  <div id="task-modal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center hidden z-40">
+    <div class="glass rounded-2xl shadow-xl p-6 w-11/12 max-w-md fade-in" style="color: var(--text-main);">
+      <h3 id="modal-title" class="text-xl font-bold mb-4">Nova Tarefa</h3>
+      <form id="task-form" class="space-y-4">
+        <input type="hidden" id="task-id"><input type="hidden" id="column-id-for-task">
+        <div>
+          <label for="task-title" class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Título</label>
+          <input type="text" id="task-title" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" style="background-color: var(--bg-input); border-color: var(--border-color);" required>
+        </div>
+        <div>
+          <label for="task-priority" class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Prioridade</label>
+          <select id="task-priority" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" style="background-color: var(--bg-input); border-color: var(--border-color);">
+            <option value="low">Baixa</option><option value="medium">Média</option><option value="high">Alta</option>
+          </select>
+        </div>
+        <div class="flex justify-end space-x-3 pt-3">
+          <button type="button" id="cancel-task-btn" class="bg-gray-600 hover:bg-gray-500 font-bold py-2 px-4 rounded-lg transition">Cancelar</button>
+          <button type="submit" class="bg-blue-600 hover:bg-blue-700 font-bold py-2 px-4 rounded-lg shadow-md transition">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="confirmation-modal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center hidden z-50">
+    <div class="glass rounded-2xl shadow-xl p-6 w-11/12 max-w-sm fade-in" style="color: var(--text-main);">
+      <h3 id="confirmation-title" class="text-xl font-bold mb-4">Confirmar Ação</h3>
+      <p id="confirmation-message" class="mb-6" style="color: var(--text-secondary);">Você tem certeza?</p>
+      <div class="flex justify-end space-x-4">
+        <button id="confirm-cancel-btn" class="bg-gray-600 hover:bg-gray-500 font-bold py-2 px-4 rounded-lg transition">Cancelar</button>
+        <button id="confirm-action-btn" class="bg-red-600 hover:bg-red-700 font-bold py-2 px-4 rounded-lg shadow-md transition">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="settings-modal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center hidden z-50">
+    <div class="glass rounded-2xl shadow-xl p-6 w-11/12 max-w-lg fade-in" style="color: var(--text-main);">
+      <div class="flex justify-between items-center mb-6">
+        <h3 class="text-2xl font-bold">Configurações</h3>
+        <button id="close-settings-btn" class="text-2xl leading-none p-1 rounded-full hover:bg-gray-600">&times;</button>
+      </div>
+      <div id="settings-message" class="text-center mb-4 hidden p-2 rounded-md"></div>
+      <div class="mb-6">
+        <h4 class="font-bold text-lg border-b pb-2 mb-4" style="border-color: var(--border-color);">Perfil</h4>
+        <form id="profile-form" class="space-y-4">
+          <div>
+            <label for="display-name" class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Nome de Exibição</label>
+            <input type="text" id="display-name" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" style="background-color: var(--bg-input); border-color: var(--border-color);">
+          </div>
+          <button type="submit" class="bg-blue-600 hover:bg-blue-700 font-bold py-2 px-4 rounded-lg shadow-md transition">Salvar Nome</button>
+        </form>
+      </div>
+      <div class="mb-6">
+        <h4 class="font-bold text-lg border-b pb-2 mb-4" style="border-color: var(--border-color);">Conta</h4>
+        <form id="password-form" class="space-y-4">
+          <div>
+            <label for="current-password" class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Senha Atual</label>
+            <input type="password" id="current-password" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" style="background-color: var(--bg-input); border-color: var(--border-color);" required>
+          </div>
+          <div>
+            <label for="new-password" class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Nova Senha</label>
+            <input type="password" id="new-password" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" style="background-color: var(--bg-input); border-color: var(--border-color);" required>
+          </div>
+          <button type="submit" class="bg-blue-600 hover:bg-blue-700 font-bold py-2 px-4 rounded-lg shadow-md transition">Alterar Senha</button>
+        </form>
+      </div>
+      <div>
+        <h4 class="font-bold text-lg border-b pb-2 mb-4" style="border-color: var(--border-color);">Aparência</h4>
+        <div class="flex items-center space-x-6">
+          <label class="flex items-center cursor-pointer"><input type="radio" name="theme" value="dark" class="mr-2 h-4 w-4">Tema Escuro</label>
+          <label class="flex items-center cursor-pointer"><input type="radio" name="theme" value="light" class="mr-2 h-4 w-4">Tema Claro</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="reset-password-modal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center hidden z-50">
+    <div class="glass rounded-2xl shadow-xl p-6 w-11/12 max-w-md fade-in" style="color: var(--text-main);">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-bold">Redefinir Senha</h3>
+            <button id="close-reset-modal-btn" class="text-2xl leading-none p-1 rounded-full hover:bg-gray-600">&times;</button>
+        </div>
+        <div id="reset-message" class="text-center mb-4 hidden p-2 rounded-md"></div>
+        <form id="reset-password-form" class="space-y-4">
+            <p style="color: var(--text-secondary);" class="text-sm">Por favor, insira seu endereço de e-mail. Enviaremos um link para você redefinir sua senha.</p>
+            <div>
+                <label for="reset-email" class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Email</label>
+                <input type="email" id="reset-email" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" style="background-color: var(--bg-input); border-color: var(--border-color);" required>
+            </div>
+            <button type="submit" id="reset-submit-btn" class="w-full bg-blue-600 hover:bg-blue-700 font-bold py-2.5 px-4 rounded-lg shadow-md transition">Enviar Link de Redefinição</button>
+        </form>
+    </div>
+  </div>
+
+
+  <script type="module">
+    // --- FIREBASE IMPORTS ---
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, updateProfile, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, doc, addDoc, setDoc, getDoc, getDocs, deleteDoc, onSnapshot, query, where, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // --- FIREBASE CONFIG ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyDyspDR3tbIVnvQTwAihrHj-2dtfstvato",
+      authDomain: "bdd001.firebaseapp.com",
+      projectId: "bdd001",
+      storageBucket: "bdd001.firebasestorage.app",
+      messagingSenderId: "477568017319",
+      appId: "1:477568017319:web:f25b221a64e6f4f2c18c82",
+      measurementId: "G-Q5L3RR5M7K"
+    };
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    
+    // --- INITIALIZATION ---
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // --- GLOBAL VARS & UI ELEMENTS ---
+    let userId = null;
+    let isLoginMode = true;
+    let draggedTask = null;
+    let unsubscribes = [];
+    let confirmationCallback = null;
+    const authScreen = document.getElementById('auth-screen');
+    const appScreen = document.getElementById('app-screen');
+    const boardContainer = document.getElementById('board-container');
+    const settingsModal = document.getElementById('settings-modal');
+    const taskModal = document.getElementById('task-modal');
+    const confirmationModal = document.getElementById('confirmation-modal');
+    const resetPasswordModal = document.getElementById('reset-password-modal');
+
+    // --- THEME LOGIC ---
+    function applyTheme(theme) {
+        document.body.className = theme === 'light' ? 'antialiased theme-light' : 'antialiased';
+        localStorage.setItem('theme', theme);
+        document.querySelectorAll('input[name="theme"]').forEach(radio => radio.checked = radio.value === theme);
+    }
+    document.querySelectorAll('input[name="theme"]').forEach(radio => {
+        radio.addEventListener('change', async (e) => {
+            const newTheme = e.target.value;
+            applyTheme(newTheme);
+            if (userId) {
+                const userDocRef = doc(db, 'users', userId);
+                await setDoc(userDocRef, { theme: newTheme }, { merge: true });
+            }
+        });
+    });
+    applyTheme(localStorage.getItem('theme') || 'dark');
+
+    // --- AUTHENTICATION LOGIC ---
+    function showAuthMessage(message, isError = true, code = '') {
+        const el = document.getElementById('auth-message');
+        let friendlyMessage = message;
+        if (isError) {
+            switch(code) {
+                case 'auth/invalid-credential': case 'auth/user-not-found': case 'auth/wrong-password':
+                    friendlyMessage = 'E-mail ou senha inválidos. Por favor, tente novamente.'; break;
+                case 'auth/email-already-in-use': friendlyMessage = 'Este endereço de e-mail já está em uso.'; break;
+                case 'auth/weak-password': friendlyMessage = 'A senha é muito fraca. Use pelo menos 6 caracteres.'; break;
+                case 'auth/invalid-email': friendlyMessage = 'O formato do e-mail é inválido.'; break;
+            }
+        }
+        el.textContent = friendlyMessage;
+        el.className = `text-center mb-4 p-2 rounded-md ${isError ? 'bg-red-500/50 text-red-200' : 'bg-green-500/50 text-green-200'}`;
+    }
+
+    function toggleAuthMode() {
+        isLoginMode = !isLoginMode;
+        document.getElementById('auth-title').textContent = isLoginMode ? 'Login' : 'Cadastro';
+        document.getElementById('login-btn').textContent = isLoginMode ? 'Entrar' : 'Cadastrar';
+        document.getElementById('auth-switch-text').textContent = isLoginMode ? 'Não tem uma conta?' : 'Já tem uma conta?';
+        document.getElementById('auth-switch-link').textContent = isLoginMode ? 'Cadastre-se' : 'Faça Login';
+        document.getElementById('auth-message').classList.add('hidden');
+        document.getElementById('forgot-password-link').style.display = isLoginMode ? 'block' : 'none';
+    }
+    document.getElementById('auth-switch-link').addEventListener('click', (e) => { e.preventDefault(); toggleAuthMode(); });
+
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        try {
+            if (isLoginMode) {
+                await signInWithEmailAndPassword(auth, email, password);
+            } else {
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                await updateProfile(userCredential.user, { displayName: email.split('@')[0] });
+            }
+        } catch (error) {
+            showAuthMessage(error.message, true, error.code);
+        }
+    });
+
+    document.getElementById('logout-btn').addEventListener('click', () => signOut(auth));
+    
+    onAuthStateChanged(auth, async (user) => {
+        unsubscribes.forEach(unsub => unsub());
+        unsubscribes = [];
+        if (user) {
+            userId = user.uid;
+            const userDocRef = doc(db, 'users', userId);
+            const userDoc = await getDoc(userDocRef);
+            if (userDoc.exists() && userDoc.data().theme) {
+                applyTheme(userDoc.data().theme);
+            }
+            
+            document.getElementById('user-display-name').textContent = user.displayName || user.email;
+            authScreen.classList.add('hidden');
+            appScreen.classList.remove('hidden');
+            loadBoard();
+        } else {
+            userId = null;
+            authScreen.classList.remove('hidden');
+            appScreen.classList.add('hidden');
+            boardContainer.innerHTML = '';
+        }
+    });
+
+    // --- RESET PASSWORD MODAL LOGIC ---
+    const resetMessageEl = document.getElementById('reset-message');
+    
+    function showResetMessage(message, isError = false) {
+        resetMessageEl.textContent = message;
+        resetMessageEl.className = `text-center mb-4 p-2 rounded-md ${isError ? 'bg-red-500/50 text-red-200' : 'bg-green-500/50 text-green-200'}`;
+    }
+
+    document.getElementById('forgot-password-link').addEventListener('click', (e) => {
+        e.preventDefault();
+        resetMessageEl.classList.add('hidden');
+        document.getElementById('reset-password-form').reset();
+        resetPasswordModal.classList.remove('hidden');
+    });
+
+    document.getElementById('close-reset-modal-btn').addEventListener('click', () => {
+        resetPasswordModal.classList.add('hidden');
+    });
+
+    document.getElementById('reset-password-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('reset-email').value;
+        const submitBtn = document.getElementById('reset-submit-btn');
+        if (!email) {
+            showResetMessage('Por favor, preencha o campo de e-mail.', true);
+            return;
+        }
+        
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Enviando...';
+        
+        try {
+            await sendPasswordResetEmail(auth, email);
+            showResetMessage('E-mail de redefinição enviado com sucesso! Verifique sua caixa de entrada.', false);
+        } catch (error) {
+            showResetMessage('Falha ao enviar e-mail. Verifique se o e-mail está correto.', true);
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Enviar Link de Redefinição';
+        }
+    });
+
+    // --- SETTINGS MODAL ---
+    function showSettingsMessage(message, isError = true) {
+        const el = document.getElementById('settings-message');
+        el.textContent = message;
+        el.className = `text-center mb-4 p-2 rounded-md ${isError ? 'bg-red-500/50 text-red-200' : 'bg-green-500/50 text-green-200'}`;
+    }
+    document.getElementById('settings-btn').addEventListener('click', () => {
+        const user = auth.currentUser;
+        if (!user) return;
+        document.getElementById('settings-message').classList.add('hidden');
+        document.getElementById('display-name').value = user.displayName || '';
+        document.getElementById('password-form').reset();
+        settingsModal.classList.remove('hidden');
+    });
+    document.getElementById('close-settings-btn').addEventListener('click', () => settingsModal.classList.add('hidden'));
+    document.getElementById('profile-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const newName = document.getElementById('display-name').value.trim();
+        if (!auth.currentUser || !newName) return;
+        try {
+            await updateProfile(auth.currentUser, { displayName: newName });
+            document.getElementById('user-display-name').textContent = newName;
+            showSettingsMessage("Nome de exibição atualizado!", false);
+        } catch (error) {
+            showSettingsMessage("Erro ao atualizar nome: " + error.message, true);
+        }
+    });
+    document.getElementById('password-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const user = auth.currentUser;
+        const currentPassword = document.getElementById('current-password').value;
+        const newPassword = document.getElementById('new-password').value;
+        if (!user || !currentPassword || !newPassword) return;
+        const credential = EmailAuthProvider.credential(user.email, currentPassword);
+        try {
+            await reauthenticateWithCredential(user, credential);
+            await updatePassword(user, newPassword);
+            showSettingsMessage("Senha alterada com sucesso!", false);
+            document.getElementById('password-form').reset();
+        } catch (error) {
+            showSettingsMessage("Erro: Senha atual incorreta ou outra falha.", true);
+        }
+    });
+
+    // --- BOARD & CRUD LOGIC ---
+    function cleanupListeners() {
+        unsubscribes.forEach(unsub => unsub()); unsubscribes = [];
+    }
+    async function loadBoard() {
+        if (!userId) return;
+        cleanupListeners();
+        const columnsQuery = query(collection(db, `users/${userId}/columns`));
+        unsubscribes.push(onSnapshot(columnsQuery, snapshot => {
+            renderColumns(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        }));
+    }
+    function renderColumns(columns) {
+        boardContainer.innerHTML = '';
+        columns.forEach(column => {
+            const columnEl = createColumnElement(column);
+            boardContainer.appendChild(columnEl);
+            const tasksQuery = query(collection(db, `users/${userId}/tasks`), where("columnId", "==", column.id));
+            unsubscribes.push(onSnapshot(tasksQuery, snapshot => {
+                renderTasks(column.id, snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            }));
+        });
+    }
+    function renderTasks(columnId, tasks) {
+        const columnBody = document.querySelector(`[data-column-id="${columnId}"] .column-body`);
+        if (!columnBody) return;
+        columnBody.innerHTML = '';
+        const priorityOrder = { high: 1, medium: 2, low: 3 };
+        tasks.sort((a, b) => {
+            if (a.completed !== b.completed) return a.completed - b.completed;
+            return (priorityOrder[a.priority] || 3) - (priorityOrder[b.priority] || 3);
+        }).forEach(task => columnBody.appendChild(createTaskElement(task)));
+    }
+    document.getElementById('add-column-btn').addEventListener('click', async () => {
+        const newName = prompt("Digite o nome do novo bloco:", "Novo Bloco");
+        if (newName && newName.trim() !== "" && userId) {
+            await addDoc(collection(db, `users/${userId}/columns`), { name: newName.trim() });
+        }
+    });
+
+    // --- ELEMENT CREATION ---
+    function createColumnElement(column) {
+        const el = document.createElement('div');
+        el.dataset.columnId = column.id;
+        el.className = 'flex-shrink-0 w-full md:w-72 rounded-lg shadow-lg flex flex-col h-full';
+        el.style.backgroundColor = 'var(--bg-column)';
+        el.innerHTML = `
+            <div class="p-3 flex justify-between items-center border-b" style="border-color: var(--border-color);">
+                <input type="text" value="${column.name}" class="column-title-input bg-transparent font-bold w-full focus:outline-none focus:bg-gray-700 rounded px-2 py-1" style="color: var(--text-main);">
+                <button class="delete-column-btn p-1 rounded-full text-gray-500 hover:text-red-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd" /></svg>
+                </button>
+            </div>
+            <div class="column-body flex-1 p-3 overflow-y-auto"></div>
+            <div class="p-3 border-t" style="border-color: var(--border-color);">
+                <button class="add-task-btn w-full font-semibold py-2 px-4 rounded-md text-sm hover:bg-gray-600" style="background-color: var(--bg-card); color: var(--text-main);">+ Adicionar Tarefa</button>
+            </div>`;
+        el.querySelector('.column-title-input').addEventListener('blur', (e) => setDoc(doc(db, `users/${userId}/columns`, column.id), { name: e.target.value.trim() }, { merge: true }));
+        el.querySelector('.delete-column-btn').addEventListener('click', () => confirmDeleteColumn(column.id, column.name));
+        el.querySelector('.add-task-btn').addEventListener('click', () => openTaskModal(null, column.id));
+        el.addEventListener('dragover', handleDragOver);
+        el.addEventListener('drop', handleDrop);
+        el.addEventListener('dragleave', (e) => e.currentTarget.classList.remove('drag-over'));
+        return el;
+    }
+    function createTaskElement(task) {
+        const priorityClasses = { high: 'bg-red-500', medium: 'bg-yellow-500', low: 'bg-green-500' };
+        const el = document.createElement('div');
+        el.dataset.taskId = task.id;
+        el.draggable = !task.completed;
+        el.className = `task-card p-3 rounded-md mb-3 shadow-md transition-all duration-200 ${task.completed ? 'completed' : 'cursor-pointer'}`;
+        el.innerHTML = `
+            <div class="flex justify-between items-start">
+                <div class="flex items-center space-x-3 flex-1 min-w-0">
+                    <input type="checkbox" class="task-checkbox h-4 w-4 rounded bg-gray-600 border-gray-500 text-blue-500 focus:ring-blue-600 cursor-pointer" ${task.completed ? 'checked' : ''}>
+                    <p class="font-medium truncate">${task.title}</p>
+                </div>
+                <div class="flex items-center space-x-1 flex-shrink-0 ml-2">
+                    <button class="edit-task-btn text-gray-400 hover:text-blue-400 p-1 rounded-full"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg></button>
+                    <button class="delete-task-btn text-gray-400 hover:text-red-400 p-1 rounded-full"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd" /></svg></button>
+                </div>
+            </div>
+            <div class="flex items-center mt-2 pl-7">
+                <span class="text-xs text-white font-semibold px-2 py-1 rounded-full ${priorityClasses[task.priority] || 'bg-gray-500'}">${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}</span>
+            </div>`;
+        el.querySelector('.task-checkbox').addEventListener('change', () => setDoc(doc(db, `users/${userId}/tasks`, task.id), { completed: !task.completed }, { merge: true }));
+        el.querySelector('.edit-task-btn').addEventListener('click', (e) => { e.stopPropagation(); openTaskModal(task); });
+        el.querySelector('.delete-task-btn').addEventListener('click', (e) => { e.stopPropagation(); confirmDeleteTask(task.id); });
+        if (!task.completed) {
+            el.addEventListener('dragstart', handleDragStart);
+            el.addEventListener('dragend', handleDragEnd);
+        }
+        return el;
+    }
+    // --- MODAL & CONFIRMATION LOGIC ---
+    function openTaskModal(task = null, columnId = null) {
+        document.getElementById('task-form').reset();
+        if (task) {
+            document.getElementById('modal-title').textContent = 'Editar Tarefa';
+            document.getElementById('task-id').value = task.id;
+            document.getElementById('task-title').value = task.title;
+            document.getElementById('task-priority').value = task.priority;
+            document.getElementById('column-id-for-task').value = task.columnId;
+        } else {
+            document.getElementById('modal-title').textContent = 'Nova Tarefa';
+            document.getElementById('task-id').value = '';
+            document.getElementById('column-id-for-task').value = columnId;
+        }
+        taskModal.classList.remove('hidden');
+    }
+    function closeTaskModal() { taskModal.classList.add('hidden'); }
+    document.getElementById('cancel-task-btn').addEventListener('click', closeTaskModal);
+    document.getElementById('task-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const taskId = document.getElementById('task-id').value;
+        const taskData = {
+            title: document.getElementById('task-title').value,
+            priority: document.getElementById('task-priority').value,
+            columnId: document.getElementById('column-id-for-task').value
+        };
+        if (taskId) {
+            await setDoc(doc(db, `users/${userId}/tasks`, taskId), taskData, { merge: true });
+        } else {
+            taskData.completed = false;
+            await addDoc(collection(db, `users/${userId}/tasks`), taskData);
+        }
+        closeTaskModal();
+    });
+    function showConfirmationModal(title, message, onConfirm) {
+        document.getElementById('confirmation-title').textContent = title;
+        document.getElementById('confirmation-message').textContent = message;
+        confirmationCallback = onConfirm;
+        confirmationModal.classList.remove('hidden');
+    }
+    function closeConfirmationModal() {
+        confirmationModal.classList.add('hidden'); confirmationCallback = null;
+    }
+    document.getElementById('confirm-cancel-btn').addEventListener('click', closeConfirmationModal);
+    document.getElementById('confirm-action-btn').addEventListener('click', () => {
+        if (confirmationCallback) confirmationCallback();
+        closeConfirmationModal();
+    });
+    async function confirmDeleteColumn(columnId, columnName) {
+        showConfirmationModal(`Deletar Bloco "${columnName}"`,
+            'Tem certeza? Todas as tarefas neste bloco serão excluídas permanentemente.',
+            async () => {
+                const tasksSnapshot = await getDocs(query(collection(db, `users/${userId}/tasks`), where("columnId", "==", columnId)));
+                const batch = writeBatch(db);
+                tasksSnapshot.forEach(taskDoc => batch.delete(taskDoc.ref));
+                batch.delete(doc(db, `users/${userId}/columns`, columnId));
+                await batch.commit();
+            });
+    }
+    function confirmDeleteTask(taskId) {
+        showConfirmationModal('Deletar Tarefa', 'Tem certeza que deseja deletar esta tarefa?',
+            () => deleteDoc(doc(db, `users/${userId}/tasks`, taskId)));
+    }
+    // --- DRAG AND DROP ---
+    function handleDragStart(e) {
+        draggedTask = e.target;
+        setTimeout(() => e.target.classList.add('dragging'), 0);
+    }
+    function handleDragEnd(e) {
+        e.target.classList.remove('dragging'); draggedTask = null;
+    }
+    function handleDragOver(e) {
+        e.preventDefault();
+        const column = e.currentTarget.closest('[data-column-id]');
+        if (column) column.classList.add('drag-over');
+    }
+    async function handleDrop(e) {
+        e.preventDefault();
+        const targetColumnEl = e.currentTarget.closest('[data-column-id]');
+        targetColumnEl.classList.remove('drag-over');
+        if (targetColumnEl && draggedTask) {
+            const targetColumnId = targetColumnEl.dataset.columnId;
+            const taskId = draggedTask.dataset.taskId;
+            await setDoc(doc(db, `users/${userId}/tasks`, taskId), { columnId: targetColumnId }, { merge: true });
+        }
+    }
+  </script>
+</body>
+</html>
